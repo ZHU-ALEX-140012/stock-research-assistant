@@ -1,0 +1,45 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# ---------- 运行时缓存 / 审计链 / 日志 ----------
+*.jsonl
+audit_chain.jsonl
+compliance_audit.jsonl
+compliance_semantic_cache.json
+compliance_cache.json
+*_cache.json
+*.log
+
+# ---------- 前端依赖与构建产物 ----------
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+
+# ---------- 内部设计文档 / 独立演示页 / 截图 / 本机启动脚本（公开仓库不含） ----------
+*.txt
+*.png
+*.jpg
+*.jpeg
+demo.html
+*.vbs
+*.bat
+
+# ---------- 本地敏感配置（仅保留运行时 public/config.js 占位） ----------
+user_config.json
+llm_config.json
+*.local.json
+.env
+.env.*
+
+# ---------- 编辑器 / 系统 ----------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
