@@ -87,6 +87,40 @@ def _stats_snapshot() -> dict:
                     thresholds={"ratio": ALERT_RATIO, "min_calls": ALERT_MIN, "fail_streak": ALERT_STREAK})
 
 
+def _latency_stats(max_lines: int = 2000) -> dict:
+    """从审计流水聚合 L3 延迟分布与判定占比（纯标准库，本地读文件不联网）。
+    只有新鲜 LLM 结果带 latency_ms；缓存命中不产生新审计行，分位数不含缓存路径。"""
+    lat, block, pas, err = [], 0, 0, 0
+    try:
+        with open(AUDIT_FILE, "r", encoding="utf-8") as f:
+            for line in f.readlines()[-max_lines:]:
+                try:
+                    o = json.loads(line)
+                except Exception:  # noqa: BLE001
+                    continue
+                if o.get("error") or o.get("alert"):
+                    err += 1
+                    continue
+                r = o.get("result") or {}
+                if isinstance(r.get("latency_ms"), int):
+                    lat.append(r["latency_ms"])
+                    if r.get("verdict") == "BLOCK":
+                        block += 1
+                    elif r.get("verdict") == "PASS":
+                        pas += 1
+    except FileNotFoundError:
+        pass
+
+    def _p(seq, q):
+        if not seq:
+            return None
+        i = min(len(seq) - 1, int(round(q * (len(seq) - 1))))
+        return sorted(seq)[i]
+
+    return {"audit_samples": len(lat), "p50_ms": _p(lat, 0.50), "p95_ms": _p(lat, 0.95),
+            "max_ms": max(lat) if lat else None, "audit_block": block, "audit_pass": pas,
+            "audit_errors": err}
+
 def _log(msg: str) -> None:
     """写文件日志，不依赖控制台（控制台被回收后写 stderr 会抛错带崩请求线程）。"""
     try:
@@ -308,11 +342,13 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):  # noqa: N802
+        if self.path.startswith("/api/compliance/stats"):
+            return self._json({"ok": True, "stats": dict(_stats_snapshot(), **_latency_stats())})
         if self.path.startswith("/api/compliance/health"):
             return self._json({"ok": True, "l3_available": bool(CFG["key"]), "model": CFG["model"],
                                "cached": len(_cache), "reason": "" if CFG["key"] else "未检测到 LLM 密钥，L3 已降级",
                                "trigger_policy": "always",
-                               "stats": _stats_snapshot()})
+                               "stats": dict(_stats_snapshot(), **_latency_stats())})
         if self.path in ("/", ""):
             self.path = "/demo.html"
         return super().do_GET()

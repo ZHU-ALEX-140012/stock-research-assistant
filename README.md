@@ -27,6 +27,7 @@
 ```
 .
 ├── compliance_server.py        # 零依赖 HTTP 后端：L3 全量合规引擎 + 降级监控
+├── eval/                       # 黄金评测集 + Node 离线评测器（规则回归/幻觉溯源）
 └── invest-practice-app/        # Vue3 + Vite 移动端前端
     └── src/
         ├── compliance/         # 三层合规引擎前端部分：engine / rules / l3
@@ -64,6 +65,29 @@ npm run build      # 生产构建，产物在 dist/
 ## 关于大模型（可选）
 
 L3 全量判定依赖大模型；不配置密钥时系统自动降级为前端 L1+L2 规则引擎，仍具备基础合规拦截能力。
+
+## 效果评测（可复现的离线指标）
+
+```bash
+node eval/run_eval.mjs          # 规则层回归：185 条黄金样本 + Wilson 95% 置信区间（离线零依赖）
+node eval/run_eval.mjs --l3     # 追加：对规则层漏网条目实测语义层增量召回（需起后端+密钥）
+node eval/run_trace_eval.mjs    # 幻觉溯源回归：注入检出 / 正当误报 / factBlock 数字自证
+```
+
+实测（deepseek-chat，2026-10；明细见 `eval/report.json` / `eval/trace_report.json`）：
+
+| 指标 | 数值 |
+|---|---|
+| 规则层（L1+L2）查全率 | 70.4%（95%CI 62.2%–77.4%，135 条应拦） |
+| 规则层误拦率 | 2.0%（50 条负样本仅 1 条：元引用「研报目标价」） |
+| L3 语义层增量召回 | 规则层漏网 40 条全部拦下 = 100%（95%CI 91.2%–100%，含变体与拆字绕过） |
+| 三层合并查全 | 135/135 = 100%，本次评测 0 降级 |
+| 幻觉溯源：注入检出 | 12/12 抓到篡改数字/凭空概率/幻觉日期；正当引用 0/12 误报 |
+| 真实产物数字可溯源率 | factBlock 42/42 有源；107 条 L3 改写 0 无来源数字 |
+| L3 延迟（审计流水聚合） | P50 733ms / P95 963ms（`GET /api/compliance/stats`） |
+
+评测集与断言入库（`eval/golden_questions.jsonl`、`eval/golden_claims.jsonl`），
+GitHub Actions 每次 push 重算（`.github/workflows/eval.yml`）：改动词表/正则导致查全或误拦越线，CI 直接变红。
 
 ## 隐私说明
 

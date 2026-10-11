@@ -1,0 +1,49 @@
+name: Eval
+
+# 方案二核心卖点：合规引擎的效果不是口头的「效果不错」，而是每次 push 都重算的指标——
+#   1) 规则层回归：180+ 黄金样本，查全率/误拦率 + Wilson 95% CI，阈值即门禁
+#   2) 溯源回归：注入幻觉句检出率、正当引用误报率、factBlock 零无源数字
+# 两个 job 全部离线（零依赖纯 JS 规则层），不需要 LLM 密钥；
+# L3 增量召回要真实密钥，本地按需 `node eval/run_eval.mjs --l3` 跑，不进 CI。
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  rule-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Rule layer regression (L1+L2, offline)
+        run: node eval/run_eval.mjs --ci
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rule-eval-report
+          path: eval/report.json
+
+  trace-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Hallucination traceability regression (offline)
+        run: node eval/run_trace_eval.mjs --ci
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trace-eval-report
+          path: eval/trace_report.json

@@ -43,3 +43,10 @@ llm_config.json
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ---------- 评测金标准（方案二：入库测试资产，反选上面的全局 *.jsonl） ----------
+!eval/golden_questions.jsonl
+!eval/golden_claims.jsonl
+# 评测报告不入库（CI/本地每次重算）
+eval/report.json
+eval/trace_report.json

@@ -3,6 +3,7 @@
  * 任一层命中即整句不回答原问题，只回公开事实数据。L3 拿不到结果时按规则层兜底，不阻断回答。 */
 import { L1_CATS, L1_ENTRIES, L1_SOFT, scanL1, scanL2 } from './rules'
 import { askL3, needL3, l3, l3stat, L3_MODES, refreshStats } from './l3'
+import { guardNeutral, wlFor } from './traceability'
 
 export function decide (t, l3res) {
   const l1 = scanL1(t)
@@ -34,7 +35,10 @@ export async function runEngine (raw, stock) {
   let out
   if (d.blocked) {
     out = `该提问涉及【${names.join('、') || (l3res ? l3res.risk_type : '合规敏感意图')}】，按合规规则不回答方向、操作、评价、推荐类问题。`
-    if (l3res && l3res.neutral) out += ` 语义层中性化改写：${l3res.neutral}`
+    if (l3res && l3res.neutral) { // 幻觉溯源防线：含无来源数字的改写整段屏蔽，不进用户可见输出
+      const g = guardNeutral(l3res.neutral, wlFor(stock))
+      out += g.ok ? ` 语义层中性化改写：${g.text}` : ` 语义层改写含 ${g.unsourced.length} 处无来源数字，已按溯源防线屏蔽`
+    }
     out += ' ' + factBlock(stock)
   } else {
     out = (d.l1.hits.length ? d.l1.text : t) + ' ' + factBlock(stock)
@@ -71,7 +75,7 @@ export function buildChain (r) {
       lb: '降级监控',
       tx: `本次会话需调 L3 但未拿到结果 ${l3stat.fail} 条（本地降级率 ${l3stat.q ? (l3stat.fail / l3stat.q * 100).toFixed(1) : '0.0'}%）；` +
         (s
-          ? `后端累计（含本次）请求 ${s.requests} 条、降级 ${s.degraded} 条（${(s.degrade_rate * 100).toFixed(1)}%）、连续失败 ${s.fail_streak} 次；告警阈值 降级率 ${(s.thresholds.ratio * 100).toFixed(0)}% 或连续失败 ${s.thresholds.fail_streak} 次，命中即写运行日志与审计流水。当前状态：${s.alert ? '已告警' : '正常'}`
+          ? `后端累计（含本次）请求 ${s.requests} 条、降级 ${s.degraded} 条（${(s.degrade_rate * 100).toFixed(1)}%）、连续失败 ${s.fail_streak} 次；告警阈值 降级率 ${(s.thresholds.ratio * 100).toFixed(0)}% 或连续失败 ${s.thresholds.fail_streak} 次，命中即写运行日志与审计流水。当前状态：${s.alert ? '已告警' : '正常'}` + (s.p50_ms != null ? `；新鲜判定延迟 P50 ${s.p50_ms}ms / P95 ${s.p95_ms}ms（审计样本 ${s.audit_samples} 条）` : '')
           : '后端未返回 stats：请确认 L3 后端已重启到含降级观测的版本')
     }
   ]
